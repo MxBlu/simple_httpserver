@@ -19,7 +19,8 @@ int main(int argc, char *argv[]) {
 
     assert(InitializeSockets()); // Initialise Windows sockets if necessary
     int serverfd = createSocket((unsigned short) atoi(argv[1]));
-
+    assert(serverfd > 0);
+    
     printf("Server running on port %s\n", argv[1]);
 
     char requestBuff[REQUEST_BUFFER_SIZE];

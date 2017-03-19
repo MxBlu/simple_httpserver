@@ -30,7 +30,7 @@
     #include <string.h>
 #endif
 
-#define MAX_SERVERBACKLOG 10
+#define MAX_SERVERBACKLOG 1000
 
 int InitializeSockets();
 void ShutdownSockets();

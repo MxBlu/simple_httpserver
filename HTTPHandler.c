@@ -8,13 +8,15 @@
 #include "HTTPHandler.h"
 
 #define REQUEST_BUFFER_SIZE 1000
-#define MAX_FILESIZE 500000 // 500kB max filesize
+#define MAX_FILEBUFFER 512000
 
 #define SEND_SUCCESS 1
 #define SEND_FAILED 0
 
 static int sendHTMLHeader(int sockfd, char *status, char *contentType, int fileSize);
 static void guessType(char *filename, char *typeBuf);
+
+static long long fsize(FILE *fp);
 
 int parseRequest(char *clientBuff, char *request) {
     char *token;
@@ -52,11 +54,11 @@ void serveHTML(int sockfd, char *file) {
     strcpy(filename, "www");
     strcat(filename, file);
 
-    FILE *fileptr = fopen(filename, "r");
-    char fileBuffer[MAX_FILESIZE];
+    FILE *fileptr = fopen(filename, "rb");
+    char fileBuffer[MAX_FILEBUFFER];
 
     if (fileptr == NULL) {
-        snprintf(fileBuffer, MAX_FILESIZE, "<!DOCTYPE html>\r\n"
+        snprintf(fileBuffer, MAX_FILEBUFFER, "<!DOCTYPE html>\r\n"
                 "<html>\r\n"
                 "<head>\r\n"
                 "<title>Error 404</title>\r\n"
@@ -76,13 +78,25 @@ void serveHTML(int sockfd, char *file) {
     } else {
         char mimetype[100];
         guessType(file, mimetype);
+        printf("sending MIME type: %s\n", mimetype);
 
-        int bytes = fread(fileBuffer, 1, MAX_FILESIZE, fileptr);
-        if (sendHTMLHeader(sockfd, "200 OK", mimetype, bytes) <= 0)
+        long long fileLen = fsize(fileptr);
+
+        if (sendHTMLHeader(sockfd, "200 OK", mimetype, fileLen) <= 0)
             return;
 
-        send(sockfd, fileBuffer, bytes, 0);
+        long long bytes;
+        long long acc = 0;
+        do {
+            bytes = fread(fileBuffer, 1, MAX_FILEBUFFER, fileptr);
+            acc += bytes;
+
+            send(sockfd, fileBuffer, bytes, 0);
+        } while (bytes > 0);
+
         fclose(fileptr);
+
+        printf("sent %lld bytes\n", acc);
     }
 
     return;
@@ -100,7 +114,7 @@ static int sendHTMLHeader(int sockfd, char *status, char *contentType, int fileS
 static void guessType(char *filename, char *typeBuf) {
     char *dotPtr = strrchr(filename, '.');
     if(strcmp(dotPtr, ".html") == 0) {
-        strcpy(typeBuf, "text/html");
+        strcpy(typeBuf, "text/html; charset=utf-8");
     } else if (strcmp(dotPtr, ".css") == 0) {
         strcpy(typeBuf, "text/css");
     } else if (strcmp(dotPtr, ".js") == 0) {
@@ -109,5 +123,14 @@ static void guessType(char *filename, char *typeBuf) {
         strcpy(typeBuf, "image/png");
     } else if (strcmp(dotPtr, ".jpg") == 0) {
         strcpy(typeBuf, "image/jpeg");
-    }
+    } else
+        strcpy(typeBuf, "application/misc");
+}
+
+static long long fsize(FILE *fp) {
+    fseek(fp, 0L, SEEK_END);
+    long long sz = ftell(fp);
+    rewind(fp);
+
+    return sz;
 }
